@@ -53,20 +53,62 @@ createUsersTable();
 //   }
 // }
 // insertAddressData();
-function getUserData(user_id) {
+// async function getUserData(user_id: string) {
+//   try {
+//     const query = `SELECT u.id, u.email, u.username, a.user_id, a.city, a.country, a.street, a.pincode
+//     FROM users u
+//     JOIN addresses a
+//     ON u.id = a.user_id
+//     WHERE u.id = $1`;
+//     const res = await client.query(query, [user_id]);
+//     console.log({ Result: res.rows, total_count: res.rowCount });
+//   } catch (error) {
+//     console.error(error);
+//   }
+// }
+// getUserData("1");
+function insertUserAndAddress(username, email, password, city, country, street, pincode) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const query = `SELECT users.id, users.email, users.username, addresses.user_id, addresses.city, addresses.country, addresses.street, addresses.pincode
-    FROM users 
-    JOIN addresses 
-    ON users.id = addresses.user_id 
-    WHERE users.id = $1`;
-            const res = yield client.query(query, [user_id]);
-            console.log({ Result: res.rows, total_count: res.rowCount });
+            // Start transaction
+            yield client.query("BEGIN");
+            // Insert user
+            const insertUserText = `
+            INSERT INTO users (username, email, password)
+            VALUES ($1, $2, $3)
+            RETURNING id;
+        `;
+            const userRes = yield client.query(insertUserText, [
+                username,
+                email,
+                password,
+            ]);
+            const userId = userRes.rows[0].id;
+            // Insert address using the returned user ID
+            const insertAddressText = `
+            INSERT INTO addresses (user_id, city, country, street, pincode)
+            VALUES ($1, $2, $3, $4, $5);
+        `;
+            yield client.query(insertAddressText, [
+                userId,
+                city,
+                country,
+                street,
+                pincode,
+            ]);
+            // Commit transaction
+            yield client.query("COMMIT");
+            console.log("User and address inserted successfully");
         }
-        catch (error) {
-            console.error(error);
+        catch (err) {
+            yield client.query("ROLLBACK"); // Roll back the transaction on error
+            console.error("Error during transaction, rolled back.", err);
+            throw err;
+        }
+        finally {
+            yield client.end(); // Close the client connection
         }
     });
 }
-getUserData("1");
+// Example usage
+insertUserAndAddress("johndoe", "john.doe@example.com", "securepassword123", "New York", "USA", "123 Broadway St", "10001");
